@@ -1,6 +1,6 @@
 # XPS-10 Controller
 
-Adalah controller untuk keyboard XPS-10 yang mengirim midi signal dari .apk HP ke XPS-10 lewat kabel OTG dan kabel USB to MIDI. README ini berisi: 
+Adalah controller untuk keyboard XPS-10 yang mengirim midi signal dari .apk HP ke XPS-10 lewat kabel OTG dan kabel USB to MIDI. Repositori ini berisi:
 
 1) UI kontrol (HTML/CSS/JS)
 2) Engine + build steps (Desktop Python + Android Capacitor)
@@ -118,12 +118,3 @@ setx CAPACITOR_ANDROID_STUDIO_PATH "C:\Program Files\Android\Android Studio\bin\
 
 Lalu di Android Studio:
 - Build → Build Bundle(s)/APK(s) → Build APK(s)
-
-## Repo hygiene
-
-File `.gitignore` sudah disiapkan untuk menghindari:
-- `__pycache__/`, `node_modules/`
-- `android/www/` (hasil build)
-- `android/android/` (hasil generate Capacitor)
-
-Kalau kamu memilih untuk commit `android/android/` juga (biar orang lain tidak perlu `cap:add`), tinggal hapus baris ignore-nya.
