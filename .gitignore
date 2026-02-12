@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+ENV/
+.env/
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Node
+node_modules/
+
+# Android / Capacitor generated output
+android/www/
+android/android/
+android/.gradle/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

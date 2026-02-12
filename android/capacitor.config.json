@@ -1,0 +1,6 @@
+{
+  "appId": "com.xps10.controller",
+  "appName": "XPS-10 Controller",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>XPS-10 Controller</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <div id="top-bar"></div>
+
+  <div id="midi-bar">
+    <div id="midi-left">
+      <span class="midi-label">MIDI OUT</span>
+      <select id="midi-outputs"></select>
+      <button id="midi-refresh" type="button">Refresh</button>
+      <button id="midi-connect" type="button">Connect</button>
+    </div>
+  </div>
+
+  <div id="patch-container"></div>
+
+  <div id="status-bar">
+    <span id="status">Not connected</span>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
