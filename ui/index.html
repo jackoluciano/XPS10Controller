@@ -2,7 +2,12 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0d">
   <title>XPS-10 Controller</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,9 +17,14 @@
   <div id="top-bar"></div>
 
   <div id="midi-bar">
+    <div id="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">XPS-10</span>
+      <span class="brand-sub">Controller</span>
+    </div>
     <div id="midi-left">
-      <span class="midi-label">MIDI OUT</span>
-      <select id="midi-outputs"></select>
+      <span class="midi-label">MIDI Out</span>
+      <select id="midi-outputs" aria-label="MIDI output port"></select>
       <button id="midi-refresh" type="button">Refresh</button>
       <button id="midi-connect" type="button">Connect</button>
     </div>
@@ -24,11 +34,16 @@
   <div id="patch-container"></div>
 
   <div id="status-bar">
-    <span id="status">Not connected</span>
-    <section id="midi-monitor" aria-live="polite">
-      <div id="monitor-patch">Current sound: Waiting for MIDI</div>
+    <div id="status-line">
+      <span id="status">Not connected</span>
+    </div>
+    <details id="midi-monitor" open aria-live="polite">
+      <summary>
+        <span id="monitor-patch">Current sound: Waiting for MIDI</span>
+        <span class="monitor-chevron" aria-hidden="true"></span>
+      </summary>
       <div id="monitor-controls"></div>
-    </section>
+    </details>
   </div>
 
 </div>

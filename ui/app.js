@@ -492,13 +492,7 @@ async function updateMonitor() {
     patchText.textContent = state.patch
       ? `Current sound: ${state.patch.patch_label}`
       : "Current sound: Waiting for Program Change";
-    const values = state.monitor_controls || {};
-    controlsEl.innerHTML = MONITOR_CONTROLS.map(({ control, name }) => {
-      const value = Object.prototype.hasOwnProperty.call(values, String(control))
-        ? values[String(control)]
-        : "—";
-      return `<span class="monitor-value"><b>${name}</b><span>${value}</span></span>`;
-    }).join("");
+    renderMonitorControls(state.monitor_controls || {});
     patchText.title = "";
   } catch (error) {
     setStatus(`Monitor error: ${error.message || error}`);
@@ -562,16 +556,17 @@ function renderBank() {
   bankView.innerHTML = `
     <section class="bank-header">
       <div>
-        <h2>Bank</h2>
         ${emptyMessage}
+        ${bankMode === "edit" ? '<p class="mode-hint">Mode Edit aktif: pilih sound yang mau diedit</p>' : ""}
+        ${bankMode === "delete" ? '<p class="mode-hint">Mode Delete aktif: pilih sound yang mau dihapus</p>' : ""}
       </div>
       <div class="bank-actions">
         <button id="add-preset" class="primary-btn" type="button">Add New Sound</button>
-        <button id="edit-mode" class="small-btn" type="button">Edit Sound</button>
-        <button id="delete-mode" class="small-btn danger-btn" type="button">Delete Sound</button>
+        <button id="edit-mode" class="small-btn ${bankMode === "edit" ? "is-active" : ""}" type="button" aria-pressed="${bankMode === "edit"}">Edit Sound</button>
+        <button id="delete-mode" class="small-btn danger-btn ${bankMode === "delete" ? "is-active" : ""}" type="button" aria-pressed="${bankMode === "delete"}">Delete Sound</button>
       </div>
     </section>
-    <div id="preset-list" class="preset-list">
+    <div id="preset-list" class="preset-list mode-${bankMode}">
       ${presets.map(preset => `
         <article class="preset-card ${bankMode !== "use" ? "selectable-card" : ""}" data-id="${escapeHtml(preset.id)}">
           <button class="preset-tile" type="button">${escapeHtml(preset.name || "Saved Sound")}</button>
@@ -639,7 +634,7 @@ function showPresetForm(saveCurrent, existingPreset = null) {
       `}
       <div class="control-grid">
         ${MIDI_CONTROLS.map(({ control, name }) => `
-          <label class="control-field">${name}<output id="value-${control}">${controlValues[control]}</output>
+          <label class="control-field"><span class="control-name">${name}</span><output id="value-${control}">${controlValues[control]}</output>
             <input class="midi-control" data-control="${control}" type="range" min="0" max="127" value="${controlValues[control]}">
           </label>
         `).join("")}
@@ -666,6 +661,21 @@ function showPresetForm(saveCurrent, existingPreset = null) {
     };
   });
   document.getElementById("save-preset").onclick = () => savePreset(saveCurrent, existingPreset);
+}
+
+function renderMonitorControls(values = {}) {
+  const controlsEl = document.getElementById("monitor-controls");
+  if (!controlsEl) return;
+  controlsEl.innerHTML = MONITOR_CONTROLS.map(({ control, name }) => {
+    const has = Object.prototype.hasOwnProperty.call(values, String(control));
+    const raw = has ? Number(values[String(control)]) : null;
+    const pct = has ? Math.round((raw / 127) * 100) : 0;
+    return `<div class="monitor-value ${has ? "" : "is-empty"}" style="--pct:${pct}%">
+      <span class="monitor-name">${name}</span>
+      <span class="monitor-num">${has ? raw : "—"}</span>
+      <i class="monitor-bar"></i>
+    </div>`;
+  }).join("");
 }
 
 async function saveCurrentPreset() {
@@ -773,6 +783,8 @@ function showError(error) {
   const msg = error && error.message ? error.message : String(error);
   setStatus(`Error: ${msg}`);
 }
+
+renderMonitorControls();
 
 // default load
 selectGroup(0);
