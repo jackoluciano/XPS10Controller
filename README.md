@@ -18,6 +18,25 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+## Web app (GitHub Pages)
+
+The controller can also run as a static web app without Python. Open the
+GitHub Pages URL in Chrome or Edge, allow MIDI access, select the XPS-10 MIDI
+output, and click **Connect**. Presets are stored in the browser's
+`localStorage`; they are not synchronized to GitHub.
+
+The web version uses the Web MIDI API and therefore requires:
+
+- a secure context (`https://`, such as GitHub Pages);
+- a browser with Web MIDI support (Chrome or Edge recommended);
+- the XPS-10 connected and visible as a MIDI input/output device;
+- permission to use SysEx for the live monitor.
+
+After enabling GitHub Pages with **Settings → Pages → GitHub Actions**, pushes
+to `main` deploy automatically to:
+
+`https://jackoluciano.github.io/XPS10Controller/`
+
 In the UI:
 - Click **Refresh** to list MIDI outputs
 - Choose the XPS-10 output port

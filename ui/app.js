@@ -48,7 +48,7 @@ for (const [_, prefix, count] of PATCH_GROUPS) {
   }
 }
 
-// Desktop bridge (pywebview) → Python Engine
+// Browser Web MIDI bridge. The desktop build still uses pywebview through main.py.
 let api = null;
 let midiOutputsEl = null;
 let midiRefreshEl = null;
@@ -72,6 +72,231 @@ function createDefaultControlValues() {
 
 let controlValues = createDefaultControlValues();
 
+class WebMidiApi {
+  constructor() {
+    this.access = null;
+    this.output = null;
+    this.input = null;
+    this.patchMap = [];
+    this.state = {
+      patch: null,
+      patch_name: null,
+      mode: null,
+      controls: {},
+      monitor_controls: {},
+      monitor_pitch: null,
+      last_midi_message: null,
+      last_sysex: null,
+      last_sysex_error: null
+    };
+    this.bankMsb = null;
+    this.bankLsb = null;
+    this.lastStateRequest = 0;
+  }
+
+  async init() {
+    if (!navigator.requestMIDIAccess) {
+      throw new Error("Browser ini tidak mendukung Web MIDI. Gunakan Chrome atau Edge.");
+    }
+    this.access = await navigator.requestMIDIAccess({ sysex: true });
+    this.access.onstatechange = () => refreshMidiOutputs();
+    const response = await fetch("engine/xps10_patch_map.json");
+    if (!response.ok) throw new Error("Patch map tidak dapat dimuat.");
+    this.patchMap = await response.json();
+  }
+
+  getOutputNames() {
+    return Array.from(this.access.outputs.values()).map(port => port.name);
+  }
+
+  findPort(name, collection) {
+    const ports = Array.from(collection.values());
+    if (name) return ports.find(port => port.name === name);
+    return ports.find(port => port.name.toLowerCase().replace(/[- ]/g, "").includes("xps10"));
+  }
+
+  async get_midi_outputs() {
+    return this.getOutputNames();
+  }
+
+  async connect_midi(name = null) {
+    const output = this.findPort(name, this.access.outputs);
+    if (!output) throw new Error("Pilih port MIDI output XPS-10.");
+    const input = this.findPort(output.name, this.access.inputs);
+    this.output = output;
+    this.input = input || null;
+    if (this.input) this.input.onmidimessage = event => this.handleMessage(event.data);
+    return output.name;
+  }
+
+  async get_status() {
+    return {
+      connected: Boolean(this.output),
+      xps10_connected: Boolean(this.output && this.isXps10Port(this.output.name)),
+      port: this.output ? this.output.name : null,
+      last_error: null
+    };
+  }
+
+  isXps10Port(name) {
+    return name.toLowerCase().replace(/[- ]/g, "").includes("xps10");
+  }
+
+  requireOutput() {
+    if (!this.output) throw new Error("MIDI belum tersambung. Pilih port lalu Connect.");
+  }
+
+  send(bytes) {
+    this.requireOutput();
+    this.output.send(bytes);
+  }
+
+  sendControl(control, value) {
+    this.send([0xB0, control, value]);
+    this.state.monitor_controls[String(control)] = value;
+    if (![1, 5, 7].includes(control)) this.state.controls[String(control)] = value;
+  }
+
+  async send_control(control, value) {
+    this.sendControl(Number(control), Number(value));
+    return true;
+  }
+
+  async send_default_controls() {
+    for (const [control, value] of [[11,64],[16,64],[64,64],[65,64],[74,64],[71,64],[73,64],[72,64],[93,64],[91,64],[10,64],[75,64],[76,0],[77,0],[78,0]]) {
+      this.sendControl(control, value);
+    }
+    return true;
+  }
+
+  async send_patch(index) {
+    const patch = this.patchMap[index];
+    if (!patch) throw new Error(`Patch index tidak valid: ${index}`);
+    this.send([0xB0, 0, patch.bank_msb]);
+    this.send([0xB0, 32, patch.bank_lsb]);
+    this.send([0xC0, patch.program]);
+    this.send([0xB0, 1, 0]);
+    this.send([0xB0, 5, 0]);
+    this.send([0xE0, 0, 64]);
+    this.state.patch = { index, patch_label: ABS_PATCH_LIST[index] };
+    this.state.patch_name = null;
+    this.state.controls = {};
+    this.state.monitor_controls = {};
+    return true;
+  }
+
+  checksum(values) {
+    return (128 - (values.reduce((sum, value) => sum + value, 0) % 128)) % 128;
+  }
+
+  request(address, size) {
+    const sizeBytes = [(size >> 24) & 0x7F, (size >> 16) & 0x7F, (size >> 8) & 0x7F, size & 0x7F];
+    const body = [0x41, 0x10, 0x00, 0x00, 0x3A, 0x11, ...address, ...sizeBytes];
+    this.send([0xF0, ...body, this.checksum(body.slice(6)), 0xF7]);
+  }
+
+  async get_current_state() {
+    this.requireOutput();
+    const now = performance.now();
+    if (now - this.lastStateRequest > 500) {
+      this.send([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]);
+      this.request([1, 0, 0, 0], 0x34);
+      if (this.state.mode === 1) {
+        this.request([0x10, 0, 0x20, 0], 0x31);
+      } else {
+        this.request([0x1F, 0, 0, 0], 0x50);
+        for (const address of [[0x1F,0,0x20,0],[0x1F,0,0x22,0],[0x1F,0,0x24,0],[0x1F,0,0x26,0]]) {
+          this.request(address, 0x11A);
+        }
+      }
+      this.lastStateRequest = now;
+    }
+    return this.state;
+  }
+
+  handleMessage(data) {
+    const bytes = Array.from(data);
+    const status = bytes[0] & 0xF0;
+    const channelData = bytes.slice(1);
+    this.state.last_midi_message = bytes;
+    if (status === 0xB0 && channelData.length >= 2) {
+      const [control, value] = channelData;
+      if (control === 0) this.bankMsb = value;
+      if (control === 32) this.bankLsb = value;
+      if (control !== 0 && control !== 32) this.state.monitor_controls[String(control)] = value;
+      if (![1, 5, 7, 0, 32].includes(control)) this.state.controls[String(control)] = value;
+      return;
+    }
+    if (status === 0xC0 && channelData.length) {
+      this.state.controls = {};
+      this.state.monitor_controls = {};
+      const patchIndex = this.patchMap.findIndex(item =>
+        item.program === channelData[0]
+        && (this.bankMsb === null || item.bank_msb === this.bankMsb)
+        && (this.bankLsb === null || item.bank_lsb === this.bankLsb)
+      );
+      this.state.patch = patchIndex >= 0
+        ? { index: patchIndex, patch_label: ABS_PATCH_LIST[patchIndex] }
+        : null;
+      return;
+    }
+    if (status === 0xE0 && channelData.length >= 2) {
+      this.state.monitor_pitch = ((channelData[1] << 7) | channelData[0]) - 8192;
+      return;
+    }
+    if (bytes[0] === 0xF0) this.handleSysEx(bytes);
+  }
+
+  handleSysEx(bytes) {
+    this.state.last_sysex = bytes;
+    if (bytes.length < 12 || bytes[1] !== 0x41 || bytes[5] !== 0x12) return;
+    const address = bytes.slice(6, 10);
+    const payload = bytes.slice(10, -2);
+    if (address.join(",") === "1,0,0,0" && payload.length) {
+      this.state.mode = payload[0];
+    } else if (address.join(",") === "31,0,0,0" && payload.length >= 12) {
+      this.state.patch_name = new TextDecoder().decode(new Uint8Array(payload.slice(0, 12))).trim();
+    } else if (address.join(",") === "16,0,32,0" && payload.length >= 7) {
+      const patch = this.patchMap.findIndex(item => item.program === payload[6]);
+      if (patch >= 0) this.state.patch = { index: patch, patch_label: ABS_PATCH_LIST[patch] };
+      this.state.monitor_controls["10"] = payload[8];
+      this.state.monitor_controls["65"] = payload[14];
+      this.state.monitor_controls["74"] = payload[17];
+      this.state.monitor_controls["71"] = payload[18];
+      this.state.monitor_controls["73"] = payload[19];
+      this.state.monitor_controls["72"] = payload[20];
+      this.state.monitor_controls["93"] = payload[29];
+      this.state.monitor_controls["91"] = payload[30];
+    } else if (address.join(",") === "31,0,32,0" && payload.length >= 0x6A) {
+      this.state.monitor_controls["93"] = payload[15];
+      this.state.monitor_controls["91"] = payload[16];
+      this.state.monitor_controls["74"] = payload[0x49];
+      this.state.monitor_controls["71"] = payload[0x4D];
+      this.state.monitor_controls["73"] = payload[0x66];
+      this.state.monitor_controls["72"] = payload[0x69];
+    }
+  }
+
+  async get_presets() {
+    return JSON.parse(localStorage.getItem("xps10-presets") || "[]");
+  }
+
+  async save_preset(preset) {
+    const saved = { ...preset, id: preset.id || crypto.randomUUID(), name: String(preset.name || "Saved Sound").trim() };
+    const all = await this.get_presets();
+    const next = all.filter(item => item.id !== saved.id);
+    next.push(saved);
+    localStorage.setItem("xps10-presets", JSON.stringify(next));
+    return saved;
+  }
+
+  async delete_preset(id) {
+    const all = await this.get_presets();
+    localStorage.setItem("xps10-presets", JSON.stringify(all.filter(item => item.id !== id)));
+    return true;
+  }
+}
+
 function patchKey(patch) {
   return patch && patch.index !== null ? String(patch.index) : null;
 }
@@ -88,63 +313,19 @@ function setStatus(text) {
   document.getElementById("status").textContent = text;
 }
 
-function isDesktopApp() {
-  return typeof window.pywebview !== "undefined" && window.pywebview.api;
-}
-
-async function initDesktopBridge() {
-  if (!window.pywebview || !window.pywebview.api) {
-    setStatus("Desktop bridge not available");
-    return;
-  }
-
-  api = window.pywebview.api;
-
+async function initWebMidi() {
   midiOutputsEl = document.getElementById("midi-outputs");
   midiRefreshEl = document.getElementById("midi-refresh");
   midiConnectEl = document.getElementById("midi-connect");
   bankView = document.getElementById("bank-view");
-
-  if (midiRefreshEl) {
-    midiRefreshEl.onclick = () => refreshMidiOutputs();
-  }
-  if (midiConnectEl) {
-    midiConnectEl.onclick = () => connectSelectedMidi();
-  }
-
-  await refreshMidiOutputs();
-
   try {
-    const status = await api.get_status();
-    if (status.connected && status.xps10_connected) {
-      xps10Connected = Boolean(status.xps10_connected);
-      setStatus(`${xps10Connected ? "Connected to XPS-10" : "Connected (not XPS-10)"} ✓ (${status.port})`);
-      if (midiOutputsEl && status.port) {
-        midiOutputsEl.value = status.port;
-      }
-      renderBank();
-      startMonitor();
-      return;
-    }
-    if (status.connected) {
-      setStatus(`Connected (not XPS-10) ✓ (${status.port})`);
-    }
-  } catch (e) {
-    // ignore and try connect
-  }
-
-  try {
-    const chosen = await api.connect_midi(null);
-    xps10Connected = true;
-    setStatus(`Connected to XPS-10 ✓ (${chosen})`);
-    if (midiOutputsEl && chosen) {
-      midiOutputsEl.value = chosen;
-    }
-    renderBank();
-    startMonitor();
+    api = new WebMidiApi();
+    await api.init();
+    await refreshMidiOutputs();
+    setStatus("Web MIDI siap. Pilih port XPS-10 lalu klik Connect.");
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
-    setStatus(`MIDI not connected: ${msg}`);
+    setStatus(`Web MIDI tidak tersedia: ${msg}`);
   }
 }
 
@@ -188,7 +369,7 @@ async function connectSelectedMidi() {
   const selected = midiOutputsEl ? midiOutputsEl.value : null;
   try {
     const chosen = await api.connect_midi(selected || null);
-    xps10Connected = Boolean(chosen && api.get_status && (await api.get_status()).xps10_connected);
+    xps10Connected = Boolean(chosen && (await api.get_status()).xps10_connected);
     setStatus(`${xps10Connected ? "Connected to XPS-10" : "Connected (not XPS-10)"} ✓ (${chosen})`);
     if (xps10Connected) startMonitor();
   } catch (e) {
@@ -197,10 +378,7 @@ async function connectSelectedMidi() {
   }
 }
 
-setStatus("Open via desktop EXE (pywebview)");
-window.addEventListener("pywebviewready", () => {
-  initDesktopBridge();
-});
+setStatus("Web MIDI belum diinisialisasi");
 
 // ---------- UI BUILD ----------
 
@@ -598,3 +776,6 @@ function showError(error) {
 
 // default load
 selectGroup(0);
+if (midiRefreshEl) midiRefreshEl.onclick = () => refreshMidiOutputs();
+if (midiConnectEl) midiConnectEl.onclick = () => connectSelectedMidi();
+initWebMidi();
