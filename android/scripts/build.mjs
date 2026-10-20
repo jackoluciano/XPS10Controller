@@ -3,12 +3,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(process.cwd());
-
-// In this curated repo layout, UI + engine live in the project root.
-// This script is executed from the "android/" folder.
-const projectRoot = path.resolve(root, '..');
-const uiDir = path.join(projectRoot, 'ui');
-const engineDir = path.join(projectRoot, 'engine');
+const uiDir = path.join(root, 'ui');
+const engineDir = path.join(root, 'engine');
 const wwwDir = path.join(root, 'www');
 
 async function main() {

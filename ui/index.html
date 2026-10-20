@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8">
   <title>XPS-10 Controller</title>
@@ -20,10 +20,15 @@
     </div>
   </div>
 
+  <div id="bank-view" hidden></div>
   <div id="patch-container"></div>
 
   <div id="status-bar">
     <span id="status">Not connected</span>
+    <section id="midi-monitor" aria-live="polite">
+      <div id="monitor-patch">Current sound: Waiting for MIDI</div>
+      <div id="monitor-controls"></div>
+    </section>
   </div>
 
 </div>
