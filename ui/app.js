@@ -101,6 +101,9 @@ class WebMidiApi {
     const response = await fetch("engine/xps10_patch_map.json");
     if (!response.ok) throw new Error("Patch map tidak dapat dimuat.");
     this.patchMap = await response.json();
+    if (!Array.isArray(this.patchMap) || this.patchMap.length !== ABS_PATCH_LIST.length) {
+      throw new Error(`Patch map tidak valid: ${this.patchMap.length} sound, seharusnya ${ABS_PATCH_LIST.length}.`);
+    }
   }
 
   async requestAccess() {
@@ -176,6 +179,9 @@ class WebMidiApi {
   }
 
   async send_patch(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.patchMap.length) {
+      throw new Error(`Patch index tidak valid: ${index}. Pilih sound dari daftar yang tersedia.`);
+    }
     const patch = this.patchMap[index];
     if (!patch) throw new Error(`Patch index tidak valid: ${index}`);
     this.send([0xB0, 0, patch.bank_msb]);
@@ -441,6 +447,10 @@ function queuePatchOperation(operation) {
 async function sendPatchNow(index, label) {
   if (!api) {
     setStatus("Not connected (run desktop app)");
+    return false;
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= ABS_PATCH_LIST.length) {
+    setStatus(`Sound tidak valid: ${label || index}`);
     return false;
   }
 
