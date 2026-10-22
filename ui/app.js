@@ -98,7 +98,7 @@ class WebMidiApi {
     if (!navigator.requestMIDIAccess) {
       throw new Error("Browser ini tidak mendukung Web MIDI. Gunakan Chrome atau Edge.");
     }
-    const response = await fetch("engine/xps10_patch_map.json");
+    const response = await fetch("../engine/xps10_patch_map.json", { cache: "no-store" });
     if (!response.ok) throw new Error("Patch map tidak dapat dimuat.");
     this.patchMap = await response.json();
     if (!Array.isArray(this.patchMap) || this.patchMap.length !== ABS_PATCH_LIST.length) {
@@ -338,6 +338,7 @@ async function initWebMidi() {
     setStatus("Web MIDI siap. Klik Connect untuk meminta akses MIDI.");
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
+    api = null;
     setStatus(`Web MIDI tidak tersedia: ${msg}`);
   }
 }
