@@ -98,11 +98,17 @@ class WebMidiApi {
     if (!navigator.requestMIDIAccess) {
       throw new Error("Browser ini tidak mendukung Web MIDI. Gunakan Chrome atau Edge.");
     }
-    this.access = await navigator.requestMIDIAccess({ sysex: true });
-    this.access.onstatechange = () => refreshMidiOutputs();
     const response = await fetch("engine/xps10_patch_map.json");
     if (!response.ok) throw new Error("Patch map tidak dapat dimuat.");
     this.patchMap = await response.json();
+  }
+
+  async requestAccess() {
+    if (!navigator.requestMIDIAccess) {
+      throw new Error("Browser ini tidak mendukung Web MIDI. Gunakan Chrome atau Edge.");
+    }
+    this.access = await navigator.requestMIDIAccess({ sysex: true });
+    this.access.onstatechange = () => refreshMidiOutputs();
   }
 
   getOutputNames() {
@@ -318,11 +324,12 @@ async function initWebMidi() {
   midiRefreshEl = document.getElementById("midi-refresh");
   midiConnectEl = document.getElementById("midi-connect");
   bankView = document.getElementById("bank-view");
+  if (midiRefreshEl) midiRefreshEl.onclick = () => refreshMidiOutputs();
+  if (midiConnectEl) midiConnectEl.onclick = () => connectSelectedMidi();
   try {
     api = new WebMidiApi();
     await api.init();
-    await refreshMidiOutputs();
-    setStatus("Web MIDI siap. Pilih port XPS-10 lalu klik Connect.");
+    setStatus("Web MIDI siap. Klik Connect untuk meminta akses MIDI.");
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     setStatus(`Web MIDI tidak tersedia: ${msg}`);
@@ -333,6 +340,7 @@ async function refreshMidiOutputs() {
   if (!api || !midiOutputsEl) return;
 
   try {
+    if (!api.access) await api.requestAccess();
     const outputs = await api.get_midi_outputs();
     midiOutputsEl.innerHTML = "";
 
@@ -368,6 +376,8 @@ async function connectSelectedMidi() {
 
   const selected = midiOutputsEl ? midiOutputsEl.value : null;
   try {
+    if (!api.access) await api.requestAccess();
+    await refreshMidiOutputs();
     const chosen = await api.connect_midi(selected || null);
     xps10Connected = Boolean(chosen && (await api.get_status()).xps10_connected);
     setStatus(`${xps10Connected ? "Connected to XPS-10" : "Connected (not XPS-10)"} ✓ (${chosen})`);
@@ -788,6 +798,4 @@ renderMonitorControls();
 
 // default load
 selectGroup(0);
-if (midiRefreshEl) midiRefreshEl.onclick = () => refreshMidiOutputs();
-if (midiConnectEl) midiConnectEl.onclick = () => connectSelectedMidi();
 initWebMidi();
